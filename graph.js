@@ -5,11 +5,12 @@ const options = {
     enabled: true,
     barnesHut: {
       theta: 1,
-      gravitationalConstant: -2000,
-      centralGravity: 0.1,
-      springLength: 255,
-      springConstant: 0.02,
-      damping: 0.08,
+      // Pull nodes into a tighter cluster (less repulsion + shorter springs).
+      gravitationalConstant: -1000,
+      centralGravity: 0.28,
+      springLength: 140,
+      springConstant: 0.04,
+      damping: 0.12,
       avoidOverlap: 0
     },
     stabilization: {
@@ -54,60 +55,87 @@ const options = {
 
 let network = null;
 let connectionsData = null;
+const loadingEl = document.getElementById('loading');
+const loadingTextEl = document.getElementById('loading-text');
+
+function setLoadingText(text) {
+  if (loadingTextEl) loadingTextEl.textContent = text;
+}
+
+function hideLoading() {
+  if (loadingEl) loadingEl.classList.add('hidden');
+}
 
 async function loadGraph() {
-  const result = await chrome.storage.local.get(['connections']);
-  const connections = result.connections;
+  try {
+    const result = await chrome.storage.local.get(['connections']);
+    const connections = result.connections;
 
-  if (!connections || Object.keys(connections).length === 0) {
-    document.getElementById('loading').textContent = 'No data. Scan friends first.';
-    return;
-  }
+    if (!connections || Object.keys(connections).length === 0) {
+      setLoadingText('No data. Scan friends first.');
+      return;
+    }
 
-  connectionsData = connections;
+    connectionsData = connections;
 
-  const data = { nodes: [], edges: [] };
-  const links = new Set();
+    const data = { nodes: [], edges: [] };
+    const links = new Set();
 
-  // build nodes and collect edges
-  for (const id in connections) {
-    const friend = connections[id];
-    data.nodes.push({
-      id: parseInt(id),
-      image: friend.avatarUrl,
-      label: friend.username,
-      title: friend.username // tooltip
+    // build nodes and collect edges
+    for (const id in connections) {
+      const friend = connections[id];
+      data.nodes.push({
+        id: parseInt(id),
+        image: friend.avatarUrl,
+        label: friend.username,
+        title: friend.username // tooltip
+      });
+
+      // add edges for mutuals (dedupe by sorting ids)
+      friend.connections.forEach(mutualId => {
+        // only add edge if mutual is also in our friends list
+        if (connections[mutualId]) {
+          const edge = [id, mutualId].sort((a, b) => parseInt(a) - parseInt(b)).join('-');
+          links.add(edge);
+        }
+      });
+    }
+
+    // convert edge set to array
+    links.forEach(link => {
+      const [from, to] = link.split('-');
+      data.edges.push({ from: parseInt(from), to: parseInt(to) });
     });
 
-    // add edges for mutuals (dedupe by sorting ids)
-    friend.connections.forEach(mutualId => {
-      // only add edge if mutual is also in our friends list
-      if (connections[mutualId]) {
-        const edge = [id, mutualId].sort((a, b) => parseInt(a) - parseInt(b)).join('-');
-        links.add(edge);
+    const container = document.getElementById('network');
+    network = new vis.Network(container, data, options);
+
+    const stabilizationEnabled = options.physics?.enabled && options.physics?.stabilization?.enabled;
+    if (stabilizationEnabled) {
+      network.on('stabilizationProgress', ({ iterations, total }) => {
+        const pct = Math.max(1, Math.min(99, Math.round((iterations / total) * 100)));
+        setLoadingText(`Graph is loading... ${pct}%`);
+      });
+
+      network.once('stabilizationIterationsDone', () => {
+        setLoadingText('Graph is loading... 100%');
+        hideLoading();
+      });
+    } else {
+      network.once('afterDrawing', () => hideLoading());
+    }
+
+    // click handler for info card
+    network.on('click', (params) => {
+      if (params.nodes.length > 0) {
+        showInfoCard(params.nodes[0]);
+      } else {
+        hideInfoCard();
       }
     });
+  } catch (err) {
+    setLoadingText(`Failed to load graph: ${err.message}`);
   }
-
-  // convert edge set to array
-  links.forEach(link => {
-    const [from, to] = link.split('-');
-    data.edges.push({ from: parseInt(from), to: parseInt(to) });
-  });
-
-  document.getElementById('loading').style.display = 'none';
-
-  const container = document.getElementById('network');
-  network = new vis.Network(container, data, options);
-
-  // click handler for info card
-  network.on('click', (params) => {
-    if (params.nodes.length > 0) {
-      showInfoCard(params.nodes[0]);
-    } else {
-      hideInfoCard();
-    }
-  });
 }
 
 function showInfoCard(nodeId) {
