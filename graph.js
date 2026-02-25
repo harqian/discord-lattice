@@ -79,6 +79,23 @@ function formatConnectionCount(count) {
   return `${count} connection${count === 1 ? '' : 's'}`;
 }
 
+function formatServerNicknames(friend) {
+  const nickEntries = Array.isArray(friend.serverNicknames) ? friend.serverNicknames : [];
+  if (nickEntries.length === 0) return '';
+
+  const uniqueNicks = [...new Set(
+    nickEntries
+      .map((entry) => entry?.nick)
+      .filter((nick) => typeof nick === 'string' && nick.length > 0)
+  )];
+
+  if (uniqueNicks.length === 0) return '';
+
+  const preview = uniqueNicks.slice(0, 3).join(', ');
+  const extra = uniqueNicks.length - 3;
+  return extra > 0 ? `Server nicknames: ${preview} +${extra} more` : `Server nicknames: ${preview}`;
+}
+
 function setLoadingText(text) {
   if (loadingTextEl) loadingTextEl.textContent = text;
 }
@@ -208,7 +225,7 @@ function showInfoCard(nodeId) {
   };
   document.getElementById('card-username').textContent = getDisplayName(friend);
   document.getElementById('card-tag').textContent = formatConnectionCount(mutualCount);
-  document.getElementById('card-stats').textContent = '';
+  document.getElementById('card-stats').textContent = formatServerNicknames(friend);
   document.getElementById('card-open').href = getProfileUrl(friend);
 
   document.getElementById('info-card').classList.add('visible');

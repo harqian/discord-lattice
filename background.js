@@ -128,6 +128,25 @@ async function discordFetch(url, token) {
   return res.json();
 }
 
+function extractServerNicknames(profile) {
+  const mutualGuilds = Array.isArray(profile?.mutual_guilds) ? profile.mutual_guilds : [];
+  return mutualGuilds
+    .filter((guild) => typeof guild?.nick === 'string' && guild.nick.trim().length > 0)
+    .map((guild) => ({
+      guildId: String(guild.id),
+      nick: guild.nick.trim()
+    }));
+}
+
+async function getServerNicknames(userId, token) {
+  // Undocumented endpoint used by Discord clients. Keep this best-effort.
+  const profile = await discordFetch(
+    `https://discord.com/api/v9/users/${userId}/profile?with_mutual_guilds=true`,
+    token
+  );
+  return extractServerNicknames(profile);
+}
+
 // just get friend count + cache the token/list for immediate scan
 let cachedToken = null;
 let cachedFriends = null;
@@ -157,7 +176,7 @@ function getUserTag(user) {
 
 async function getFriendCount(tabId) {
   const token = await extractToken(tabId);
-  if (!token) return { error: 'Could not extract token. Make sure you are logged into Discord.' };
+  if (!token) return { error: 'Could not extract token. Make sure you are logged into Discord; try reloading while on Discord.' };
 
   try {
     const relationships = await discordFetch(
@@ -176,6 +195,7 @@ async function getFriendCount(tabId) {
 // scan friends and their mutual connections
 async function scanFriends(tabId, limit) {
   scanCancelled = false;
+  await chrome.storage.local.set({ scanProgress: { current: 0, total: null } });
 
   // use cached data from count step if available, otherwise fetch fresh
   let token = cachedToken;
@@ -186,6 +206,7 @@ async function scanFriends(tabId, limit) {
   if (!token) {
     token = await extractToken(tabId);
     if (!token) {
+      await chrome.storage.local.set({ scanProgress: null });
       return { error: 'Could not extract token. Make sure you are logged into Discord.' };
     }
   }
@@ -204,6 +225,9 @@ async function scanFriends(tabId, limit) {
       friends = friends.slice(0, limit);
     }
     console.log('[bg] scanning', friends.length, 'of', total, 'friends');
+    await chrome.storage.local.set({
+      scanProgress: { current: 0, total: friends.length }
+    });
 
     const data = {};
 
@@ -223,6 +247,7 @@ async function scanFriends(tabId, limit) {
       const avatarUrl = getAvatarUrl(friend.user);
       const tag = getUserTag(friend.user);
       const displayName = friend.user.global_name || friend.user.username;
+      let serverNicknames = [];
 
       data[friend.user.id] = {
         username: friend.user.username,
@@ -233,6 +258,7 @@ async function scanFriends(tabId, limit) {
         avatarUrl,
         id: friend.user.id,
         profileUrl: `https://discord.com/users/${friend.user.id}`,
+        serverNicknames,
         connections: []
       };
 
@@ -244,6 +270,13 @@ async function scanFriends(tabId, limit) {
         data[friend.user.id].connections = mutuals.map(m => m.id);
       } catch(e) {
         console.log('[bg] mutuals failed for', friend.user.username, e.message);
+      }
+
+      try {
+        serverNicknames = await getServerNicknames(friend.user.id, token);
+        data[friend.user.id].serverNicknames = serverNicknames;
+      } catch (e) {
+        console.log('[bg] profile nicknames failed for', friend.user.username, e.message);
       }
 
       await chrome.storage.local.set({
@@ -261,6 +294,7 @@ async function scanFriends(tabId, limit) {
     return { data };
   } catch(e) {
     console.log('[bg] scan error:', e.message);
+    await chrome.storage.local.set({ scanProgress: null });
     return { error: e.message };
   }
 }

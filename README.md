@@ -10,6 +10,7 @@ Everything runs locally in your browser. There is no backend and no build step.
 - Choose a scan limit before starting (useful for large friend lists)
 - Track scan progress and stop mid-scan if needed
 - Explore connections in a graph view with avatars and node highlighting
+- Capture per-server nicknames from mutual guild profile data (best effort)
 - Clear stored data at any time
 
 ## Quick Start

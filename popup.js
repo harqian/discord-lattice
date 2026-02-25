@@ -18,6 +18,8 @@ const progressCount = document.getElementById('progress-count');
 const buttons = document.getElementById('buttons');
 
 let progressInterval = null;
+let scanStartGraceUntil = 0;
+let stopRequested = false;
 const APPROX_SECONDS_PER_FRIEND = 1.25;
 
 function formatDuration(seconds) {
@@ -88,7 +90,17 @@ function showScanning(current, total) {
   }
 }
 
+function showStopping() {
+  hideAll();
+  progressSection.classList.remove('hidden');
+  buttons.classList.add('hidden');
+  stopBtn.disabled = true;
+  status.textContent = 'Stopping scan...';
+  progressLabel.textContent = 'Stopping...';
+}
+
 function showDone(count) {
+  stopRequested = false;
   showIdle(`${count} friends scanned`);
   viewBtn.disabled = false;
   exportBtn.disabled = false;
@@ -110,10 +122,21 @@ function startProgressPolling() {
   progressInterval = setInterval(() => {
     chrome.storage.local.get(['scanProgress', 'connections'], (result) => {
       if (result.scanProgress) {
+        scanStartGraceUntil = 0;
         const { current, total } = result.scanProgress;
-        showScanning(current, total);
+        if (stopRequested) {
+          showStopping();
+        } else {
+          showScanning(current, total);
+        }
       } else {
+        if (scanStartGraceUntil && Date.now() < scanStartGraceUntil) {
+          showScanning(0, null);
+          return;
+        }
         stopProgressPolling();
+        scanStartGraceUntil = 0;
+        stopRequested = false;
         if (result.connections && Object.keys(result.connections).length > 0) {
           showDone(Object.keys(result.connections).length);
         } else {
@@ -146,15 +169,19 @@ scanBtn.addEventListener('click', () => {
 // step 2: user picks limit and starts
 startScanBtn.addEventListener('click', () => {
   const limit = parseInt(limitInput.value) || parseInt(limitInput.max);
+  stopRequested = false;
+  scanStartGraceUntil = Date.now() + 15000;
   showScanning(0, limit);
   startProgressPolling();
 
   chrome.runtime.sendMessage({ action: 'scan', limit }, (response) => {
     if (chrome.runtime.lastError) {
+      scanStartGraceUntil = 0;
       showIdle('Error: Refresh Discord and try again');
       return;
     }
     if (response?.error) {
+      scanStartGraceUntil = 0;
       showIdle(`Error: ${response.error}`);
     }
   });
@@ -174,9 +201,9 @@ limitInput.addEventListener('input', () => {
 });
 
 stopBtn.addEventListener('click', () => {
+  stopRequested = true;
   chrome.runtime.sendMessage({ action: 'stop' });
-  progressLabel.textContent = 'Stopping...';
-  stopBtn.disabled = true;
+  showStopping();
 });
 
 clearDuringBtn.addEventListener('click', () => {
