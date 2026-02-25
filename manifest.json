@@ -3,7 +3,7 @@
   "name": "Discord Lattice",
   "version": "1.0.0",
   "description": "Visualize your Discord friends network as an interactive graph. All data stays local.",
-  "permissions": ["storage", "scripting"],
+  "permissions": ["storage", "scripting", "downloads"],
   "host_permissions": ["https://discord.com/*", "https://cdn.discordapp.com/*"],
   "background": {
     "service_worker": "background.js"

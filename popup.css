@@ -220,6 +220,21 @@ button {
   cursor: not-allowed;
 }
 
+#export {
+  background: #4f545c;
+  color: #fff;
+}
+
+#export:hover:not(:disabled) {
+  background: #5d6269;
+}
+
+#export:disabled {
+  background: #4f545c;
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 #clear {
   background: transparent;
   color: #ed4245;

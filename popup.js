@@ -1,5 +1,6 @@
 const scanBtn = document.getElementById('scan');
 const viewBtn = document.getElementById('view');
+const exportBtn = document.getElementById('export');
 const clearBtn = document.getElementById('clear');
 const stopBtn = document.getElementById('stop');
 const clearDuringBtn = document.getElementById('clear-during-scan');
@@ -71,6 +72,7 @@ function showScanning(current, total) {
 function showDone(count) {
   showIdle(`${count} friends scanned`);
   viewBtn.disabled = false;
+  exportBtn.disabled = false;
 }
 
 // restore state on popup open
@@ -153,6 +155,7 @@ clearDuringBtn.addEventListener('click', () => {
   chrome.runtime.sendMessage({ action: 'clearData' }, () => {
     showIdle('Data cleared');
     viewBtn.disabled = true;
+    exportBtn.disabled = true;
   });
 });
 
@@ -164,5 +167,44 @@ clearBtn.addEventListener('click', () => {
   chrome.storage.local.clear(() => {
     showIdle('Data cleared');
     viewBtn.disabled = true;
+    exportBtn.disabled = true;
+  });
+});
+
+exportBtn.addEventListener('click', () => {
+  exportBtn.disabled = true;
+  status.textContent = 'Preparing export...';
+
+  chrome.storage.local.get(['connections'], (result) => {
+    const connections = result.connections;
+    if (!connections || Object.keys(connections).length === 0) {
+      status.textContent = 'No data to export';
+      exportBtn.disabled = true;
+      return;
+    }
+
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      totalUsers: Object.keys(connections).length,
+      connections
+    };
+
+    const dataUrl = `data:application/json;charset=utf-8,${encodeURIComponent(
+      JSON.stringify(payload, null, 2)
+    )}`;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `discord-lattice-export-${timestamp}.json`;
+
+    chrome.downloads.download(
+      { url: dataUrl, filename, saveAs: true },
+      (downloadId) => {
+        if (chrome.runtime.lastError || !downloadId) {
+          status.textContent = `Export failed: ${chrome.runtime.lastError?.message || 'Unknown error'}`;
+        } else {
+          status.textContent = 'Export started';
+        }
+        exportBtn.disabled = false;
+      }
+    );
   });
 });
