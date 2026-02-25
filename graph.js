@@ -47,7 +47,7 @@ const options = {
   },
   edges: {
     color: { color: '#444', highlight: '#5865f2' },
-    width: 0,
+    width: 1,
     chosen: false
   },
   interaction: {
@@ -241,17 +241,46 @@ function highlightConnections(nodeId) {
   }
 
   network.body.data.nodes.update(updates);
+
+  // Emphasize only edges connected to the selected node.
+  const edgeUpdates = [];
+  const edges = network.body.data.edges.get();
+  for (const edge of edges) {
+    const isConnected = edge.from === normalizedNodeId || edge.to === normalizedNodeId;
+    edgeUpdates.push({
+      id: edge.id,
+      color: isConnected ? '#5865f2' : 'rgba(68, 68, 68, 0.08)',
+      width: isConnected ? 2 : 1
+    });
+  }
+  network.body.data.edges.update(edgeUpdates);
 }
 
 function resetHighlight() {
+  if (!connectionsData || !network) return;
+
   const updates = [];
   for (const id in connectionsData) {
     updates.push({ id: id, opacity: 1.0 });
   }
   network.body.data.nodes.update(updates);
+
+  const edgeUpdates = [];
+  const edges = network.body.data.edges.get();
+  for (const edge of edges) {
+    edgeUpdates.push({ id: edge.id, color: '#444', width: 1 });
+  }
+  network.body.data.edges.update(edgeUpdates);
 }
 
 // close button for info card
 document.querySelector('#info-card .close').addEventListener('click', hideInfoCard);
+
+// Esc clears active selection/highlight.
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (network) network.unselectAll();
+  hideInfoCard();
+});
 
 loadGraph();
