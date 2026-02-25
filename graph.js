@@ -62,6 +62,13 @@ let connectionsData = null;
 const loadingEl = document.getElementById('loading');
 const loadingTextEl = document.getElementById('loading-text');
 const defaultAvatarUrl = 'https://cdn.discordapp.com/embed/avatars/0.png';
+const searchOverlayEl = document.getElementById('search-overlay');
+const searchInputEl = document.getElementById('search-input');
+const searchResultsEl = document.getElementById('search-results');
+const searchEmptyEl = document.getElementById('search-empty');
+let searchIndex = [];
+let searchResults = [];
+let activeResultIndex = 0;
 
 function getDisplayName(friend) {
   return friend.displayName || friend.globalName || friend.global_name || friend.username || 'Unknown User';
@@ -96,6 +103,157 @@ function formatServerNicknames(friend) {
   return extra > 0 ? `Server nicknames: ${preview} +${extra} more` : `Server nicknames: ${preview}`;
 }
 
+function getNickPreview(friend) {
+  const nickEntries = Array.isArray(friend.serverNicknames) ? friend.serverNicknames : [];
+  const uniqueNicks = [...new Set(
+    nickEntries
+      .map((entry) => entry?.nick)
+      .filter((nick) => typeof nick === 'string' && nick.trim().length > 0)
+      .map((nick) => nick.trim())
+  )];
+  return uniqueNicks.slice(0, 3).join(', ');
+}
+
+function toSearchText(friend) {
+  const fields = [];
+  fields.push(friend.username || '');
+  fields.push(friend.globalName || friend.global_name || '');
+  fields.push(friend.displayName || '');
+  const nickEntries = Array.isArray(friend.serverNicknames) ? friend.serverNicknames : [];
+  nickEntries.forEach((entry) => {
+    if (typeof entry?.nick === 'string') fields.push(entry.nick);
+  });
+  return fields.join(' ').toLowerCase();
+}
+
+function buildSearchIndex(connections) {
+  searchIndex = Object.entries(connections).map(([id, friend]) => ({
+    id: normalizeId(id),
+    name: getDisplayName(friend),
+    username: friend.username || '',
+    nickPreview: getNickPreview(friend),
+    avatarUrl: friend.avatarUrl || defaultAvatarUrl,
+    searchText: toSearchText(friend)
+  }));
+}
+
+function fuzzyScore(haystack, needle) {
+  if (!needle) return 1;
+  if (!haystack) return -1;
+  if (haystack.includes(needle)) return 1000 - (haystack.indexOf(needle) * 2);
+
+  let score = 0;
+  let hPos = 0;
+  let streak = 0;
+  for (let i = 0; i < needle.length; i++) {
+    const ch = needle[i];
+    const found = haystack.indexOf(ch, hPos);
+    if (found === -1) return -1;
+    if (found === hPos) {
+      streak += 1;
+      score += 5 + streak;
+    } else {
+      streak = 0;
+      score += 1;
+    }
+    hPos = found + 1;
+  }
+  return score;
+}
+
+function getSearchResults(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return searchIndex.slice(0, 30);
+
+  return searchIndex
+    .map((entry) => ({ ...entry, score: fuzzyScore(entry.searchText, q) }))
+    .filter((entry) => entry.score >= 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 30);
+}
+
+function renderSearchResults() {
+  searchResultsEl.innerHTML = '';
+  if (searchResults.length === 0) {
+    searchEmptyEl.style.display = 'block';
+    return;
+  }
+  searchEmptyEl.style.display = 'none';
+
+  searchResults.forEach((item, idx) => {
+    const li = document.createElement('li');
+    li.className = `search-item${idx === activeResultIndex ? ' active' : ''}`;
+    li.setAttribute('role', 'option');
+    li.setAttribute('aria-selected', idx === activeResultIndex ? 'true' : 'false');
+    li.dataset.id = item.id;
+    const avatar = document.createElement('img');
+    avatar.src = item.avatarUrl;
+    avatar.alt = '';
+
+    const textWrap = document.createElement('div');
+    textWrap.className = 'search-text';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'search-name';
+    nameEl.textContent = item.name;
+
+    const metaEl = document.createElement('div');
+    metaEl.className = 'search-meta';
+    metaEl.textContent = item.nickPreview || item.username || 'No nickname data';
+
+    textWrap.appendChild(nameEl);
+    textWrap.appendChild(metaEl);
+    li.appendChild(avatar);
+    li.appendChild(textWrap);
+    li.addEventListener('mouseenter', () => {
+      activeResultIndex = idx;
+      renderSearchResults();
+    });
+    li.addEventListener('click', () => {
+      selectSearchResult(item.id);
+    });
+    searchResultsEl.appendChild(li);
+  });
+}
+
+function updateSearchResults() {
+  searchResults = getSearchResults(searchInputEl.value);
+  if (activeResultIndex >= searchResults.length) activeResultIndex = 0;
+  renderSearchResults();
+}
+
+function openSearch() {
+  if (!searchOverlayEl) return;
+  searchOverlayEl.classList.add('visible');
+  searchOverlayEl.setAttribute('aria-hidden', 'false');
+  activeResultIndex = 0;
+  updateSearchResults();
+  searchInputEl.focus();
+  searchInputEl.select();
+}
+
+function closeSearch() {
+  if (!searchOverlayEl) return;
+  searchOverlayEl.classList.remove('visible');
+  searchOverlayEl.setAttribute('aria-hidden', 'true');
+}
+
+function selectSearchResult(id) {
+  if (!network || !connectionsData) return;
+  const normalizedId = normalizeId(id);
+  closeSearch();
+  network.selectNodes([normalizedId]);
+  network.focus(normalizedId, {
+    scale: Math.max(network.getScale(), 0.65),
+    animation: { duration: 350, easingFunction: 'easeInOutQuad' }
+  });
+  showInfoCard(normalizedId);
+}
+
+function isSearchOpen() {
+  return searchOverlayEl && searchOverlayEl.classList.contains('visible');
+}
+
 function setLoadingText(text) {
   if (loadingTextEl) loadingTextEl.textContent = text;
 }
@@ -115,6 +273,7 @@ async function loadGraph() {
     }
 
     connectionsData = connections;
+    buildSearchIndex(connections);
 
     const data = { nodes: [], edges: [] };
     const links = new Set();
@@ -295,9 +454,72 @@ document.querySelector('#info-card .close').addEventListener('click', hideInfoCa
 
 // Esc clears active selection/highlight.
 document.addEventListener('keydown', (event) => {
+  const isCmdK = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k';
+  if (isCmdK) {
+    event.preventDefault();
+    openSearch();
+    return;
+  }
+
+  if (event.key === '/') {
+    const isInputTarget = event.target instanceof HTMLElement &&
+      (event.target.tagName === 'INPUT' ||
+       event.target.tagName === 'TEXTAREA' ||
+       event.target.isContentEditable);
+    if (!isInputTarget) {
+      event.preventDefault();
+      openSearch();
+      return;
+    }
+  }
+
+  if (isSearchOpen()) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeSearch();
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (searchResults.length > 0) {
+        activeResultIndex = (activeResultIndex + 1) % searchResults.length;
+        renderSearchResults();
+      }
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (searchResults.length > 0) {
+        activeResultIndex = (activeResultIndex - 1 + searchResults.length) % searchResults.length;
+        renderSearchResults();
+      }
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (searchResults[activeResultIndex]) {
+        selectSearchResult(searchResults[activeResultIndex].id);
+      }
+      return;
+    }
+  }
+
   if (event.key !== 'Escape') return;
   if (network) network.unselectAll();
   hideInfoCard();
 });
+
+if (searchInputEl) {
+  searchInputEl.addEventListener('input', () => {
+    activeResultIndex = 0;
+    updateSearchResults();
+  });
+}
+
+if (searchOverlayEl) {
+  searchOverlayEl.addEventListener('click', (event) => {
+    if (event.target === searchOverlayEl) closeSearch();
+  });
+}
 
 loadGraph();
