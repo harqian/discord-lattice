@@ -1,6 +1,6 @@
-# Discord Lattice
+# Discord Friend Graph
 
-Discord Lattice is a Chrome extension that scans your Discord friends list and visualizes mutual connections as an interactive network graph.
+Discord Friend Graph is a Chrome extension that scans your Discord friends list and visualizes mutual connections as an interactive network graph.
 
 Everything runs locally in your browser. There is no backend and no build step.
 

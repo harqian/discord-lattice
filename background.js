@@ -55,7 +55,7 @@ async function extractToken(tabId) {
 
           let token = null;
           const modules = [];
-          webpackChunkdiscord_app.push([['__lattice__'], {}, o => {
+          webpackChunkdiscord_app.push([['__friend_graph__'], {}, o => {
             for (let c in o.c) modules.push(o.c[c]);
           }]);
           webpackChunkdiscord_app.pop();

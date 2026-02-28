@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Discord Lattice",
+  "name": "Discord Friends Graph",
   "version": "1.0.0",
-  "description": "Visualize your Discord friends network as an interactive graph. All data stays local.",
+  "description": "Display mutual connections and mutual servers with your friends on discord. All data stays local.",
   "permissions": ["storage", "scripting", "downloads"],
   "host_permissions": ["https://discord.com/*", "https://cdn.discordapp.com/*"],
   "background": {

@@ -301,7 +301,7 @@ exportBtn.addEventListener('click', () => {
       JSON.stringify(payload, null, 2)
     )}`;
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `discord-lattice-export-${timestamp}.json`;
+    const filename = `discord-friend-graph-export-${timestamp}.json`;
 
     chrome.downloads.download(
       { url: dataUrl, filename, saveAs: true },
