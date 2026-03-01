@@ -88,6 +88,6 @@ We may update this Privacy Policy from time to time. When we do, we will update 
 
 For questions about this Privacy Policy, contact:
 
-- Name: [Your name or organization]
-- Email: [Your contact email]
-- Website or support page: [Your website or support URL]
+- Name: Harrison Qian
+- Email: harrisonq125@gmail.com
+- Website or support page: https://github.com/harqian/discord-friends-graph/issues
