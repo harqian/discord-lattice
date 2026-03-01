@@ -45,6 +45,8 @@ Everything runs locally in your browser. There is no backend and no build step.
 
 You can remove data anytime via **Clear Data** in the popup.
 
+Full privacy policy: [PRIVACY_POLICY.md](./PRIVACY_POLICY.md)
+
 ## Permissions
 
 | Permission | Why |
